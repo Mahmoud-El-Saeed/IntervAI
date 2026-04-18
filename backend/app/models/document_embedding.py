@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
-from app.config import get_settings
+from app.core.config import get_settings
 
 settings = get_settings()
 
