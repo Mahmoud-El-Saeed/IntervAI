@@ -1,1 +1,1 @@
-from interview_status import InterviewStatus
+from .interview_status import InterviewStatus

@@ -1,5 +1,5 @@
 from app.db import create_user , get_user_by_email 
-from app.core.security import get_password_hash, verify_password
+from app.core.security import get_password_hash
 from app.core.config import get_settings
 from app.models import User 
 from app.schemas import UserCreate , UserResponse
@@ -30,17 +30,4 @@ def register_user(db: Session, user_create: UserCreate) -> UserResponse:
         )
     return UserResponse.model_validate(user)
 
-def authenticate_user(db: Session, email: str, password: str) -> UserResponse | None:
-    """
-    Authenticate a user by email and password.
-    
-    Returns the UserResponse object if authentication is successful, or None if it fails.
-    """
-    user = get_user_by_email(db, email)
-    if not user:
-        return None
-    if not verify_password(password, user.hashed_password):
-        return None
-
-    return UserResponse.model_validate(user)
 

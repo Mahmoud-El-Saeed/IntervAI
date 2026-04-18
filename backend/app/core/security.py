@@ -3,7 +3,7 @@ import jwt
 from datetime import datetime, timedelta, timezone
 import secrets
 
-from config import get_settings
+from .config import get_settings
 
 settings = get_settings()
 
