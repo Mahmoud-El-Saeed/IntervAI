@@ -62,4 +62,4 @@ async def register(
 # test route to verify token
 @router.get("/profile")
 async def get_profile(current_user: User = Depends(get_current_user)):
-    return current_user
+    return UserResponse.model_validate(current_user)

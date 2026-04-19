@@ -1,8 +1,10 @@
-from app.routes.auth import router as auth_router
+from app.routes.auth import router as auth_router 
+from app.routes.resume import router as resume_router
 from fastapi import FastAPI
 
 app = FastAPI(title="IntervAI Backend API", version="1.0")
 app.include_router(auth_router)
+app.include_router(resume_router)
 
 @app.get("/")
 async def root():

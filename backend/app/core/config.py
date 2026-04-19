@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
+    FILE_ALLOWED_TYPES: list[str]
+    FILE_ALLOWED_SIZE_MB: int
+    FILE_UPLOAD_DIR: str
+    FILE_DEFAULT_CHUNK_SIZE: int
 
 def get_settings() -> Settings:
     return Settings()
