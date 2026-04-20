@@ -24,4 +24,10 @@ def load_document(file_path: str) -> dict:
         result_doc["content"].append(doc.page_content)
         result_doc["metadata"].append(doc.metadata)
     return result_doc
+
+
+def load_document_text(file_path: str) -> str:
+    """Load a document and return its content as plain text."""
+    doc = load_document(file_path)
+    return " ".join(doc["content"])
     

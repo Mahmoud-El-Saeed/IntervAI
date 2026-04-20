@@ -59,3 +59,27 @@ def get_interview_details_for_user(db: Session, interview_id: UUID, user_id: UUI
         .filter(Interview.id == interview_id, Interview.user_id == user_id)
         .first()
     )
+
+
+def get_interview_by_id_with_resume(db: Session, interview_id: UUID) -> Interview | None:
+    """Retrieve one interview with resume relationship loaded."""
+    return (
+        db.query(Interview)
+        .options(selectinload(Interview.resume))
+        .filter(Interview.id == interview_id)
+        .first()
+    )
+
+
+def update_interview_status(
+    db: Session, interview_id: UUID, status: InterviewStatus
+) -> Interview | None:
+    """Update interview lifecycle status."""
+    interview = db.query(Interview).filter(Interview.id == interview_id).first()
+    if not interview:
+        return None
+
+    interview.status = status
+    db.commit()
+    db.refresh(interview)
+    return interview
