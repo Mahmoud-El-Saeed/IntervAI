@@ -88,6 +88,8 @@ class InterviewState(TypedDict, total=False):
 
     status: str
     progress_message: str
+    status_events: Annotated[list[str], operator.add]
+    progress_events: Annotated[list[str], operator.add]
     error_message: str
     analysis_persisted: bool
 
@@ -121,4 +123,4 @@ class InterviewState(TypedDict, total=False):
     project_total_expected: int
     project_count_completed: Annotated[int, operator.add]
 
-    final_analysis_payload: dict[str, Any]
+    final_analysis_payload: Annotated[dict[str, Any], operator.or_]

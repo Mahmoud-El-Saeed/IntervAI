@@ -17,6 +17,7 @@ from app.core.loader import load_document_text
 from app.core.config import get_settings
 import os
 
+from app.core.analysis_logging import get_analysis_logger
 from .state import (
     CVExtraction,
     FinalAnalysisPayload,
@@ -30,7 +31,7 @@ from .state import (
 
 settings = get_settings()
 
-logger = logging.getLogger(__name__)
+logger = get_analysis_logger(__name__)
 os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
 os.environ["GROQ_API_KEY"] = settings.GROQ_API_KEY
 
@@ -45,7 +46,7 @@ def _log_progress(node_name: str, message: str, level: int = logging.INFO) -> No
     Centralized logging for node progress updates, including interview ID context when available.
     Logs are structured to include the node name and a clear progress message.
     """
-    logger.log(level, "%s | %s", node_name, message)
+    logger.log(level, "[%s] %s", node_name, message)
 
 
 def _project_links_to_map(project_links: Iterable[dict[str, str]] | Iterable[Any]) -> dict[str, str]:
@@ -382,8 +383,8 @@ async def market_intelligence_node(state: InterviewState) -> dict[str, Any]:
 
     _log_progress("market_intelligence_node", "Market search completed")
     return {
-        "status": "market_researched",
-        "progress_message": "Market intelligence completed",
+        "status_events": ["market_researched"],
+        "progress_events": ["Market intelligence completed"],
         "search_queries": query_results.queries[:3],
         "search_results": json.dumps(search_payloads, default=str),
         "market_analysis_completed": True,
@@ -430,8 +431,8 @@ async def market_summary_node(state: InterviewState) -> dict[str, Any]:
 
     _log_progress("market_summary_node", "Market summarization completed")
     return {
-        "status": "market_summarized",
-        "progress_message": "Market intelligence summarized",
+        "status_events": ["market_summarized"],
+        "progress_events": ["Market intelligence summarized"],
         "market_summary": market_summary,
     }
 
@@ -510,8 +511,8 @@ async def project_summary_node(state: InterviewState) -> dict[str, Any]:
 
     _log_progress("project_summary_node", f"Project summary completed for {project_name}")
     return {
-        "status": "project_summarized",
-        "progress_message": f"Project summary completed for {project_name}",
+        "status_events": ["project_summarized"],
+        "progress_events": [f"Project summary completed for {project_name}"],
         "project_summaries": {project_name: summary},
         "project_errors": {project_name: summary["error"]} if "error" in summary else {},
         "project_count_completed": 1,
@@ -524,16 +525,15 @@ async def finalize_analysis_node(state: InterviewState) -> dict[str, Any]:
     market_ready = bool(state.get("market_analysis_completed", False))
 
     if not market_ready or (project_total_expected > 0 and project_completed < project_total_expected):
-        return {
-            "status": "analysis_in_progress",
-            "progress_message": "Waiting for all analysis branches to complete",
-        }
+        return {}
+
+    if state.get("final_analysis_payload"):
+        return {}
 
     final_payload = _build_final_payload(state)
     _log_progress("finalize_analysis_node", "Analysis payload assembled")
     return {
-        "status": "analysis_ready",
-        "progress_message": "Final analysis payload ready",
+        "status_events": ["analysis_ready"],
+        "progress_events": ["Final analysis payload ready"],
         "final_analysis_payload": final_payload.model_dump(),
-        "analysis_persisted": False,
     }

@@ -1,14 +1,10 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 from typing import Any
 
-from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
-
-from app.core.config import get_settings
 
 from .nodes import (
     extract_cv_node,
@@ -24,7 +20,6 @@ from .state import InterviewState
 
 
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 def _route_after_validation(state: InterviewState) -> list[str | Send]:
@@ -70,10 +65,7 @@ def _build_graph() -> StateGraph[InterviewState]:
     return builder
 
 
-@lru_cache(maxsize=1)
-def get_resume_analysis_graph():
+def get_resume_analysis_graph(checkpointer: Any):
     builder = _build_graph()
-    checkpointer = PostgresSaver.from_conn_string(settings.DATABASE_URI)
-    checkpointer.setup()
-    logger.info("Resume analysis graph compiled with Postgres checkpointing")
+    logger.info("Resume analysis graph compiled with database checkpointer")
     return builder.compile(checkpointer=checkpointer)

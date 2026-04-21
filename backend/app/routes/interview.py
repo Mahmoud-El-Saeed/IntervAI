@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.db.interview_crud import get_interview_for_user
 from app.models import User
 from app.schemas.interview import (
@@ -72,10 +72,14 @@ async def get_interview_by_id(
 async def trigger_interview_analysis(
     interview_id: UUID,
     background_tasks: BackgroundTasks,
-    db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict[str, str]:
-    interview = get_interview_for_user(db, interview_id, current_user.id)
+    db = SessionLocal()
+    try:
+        interview = get_interview_for_user(db, interview_id, current_user.id)
+    finally:
+        db.close()
+
     if interview is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interview not found.")
 

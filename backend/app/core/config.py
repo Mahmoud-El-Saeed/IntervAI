@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     FILE_ALLOWED_SIZE_MB: int
     FILE_UPLOAD_DIR: str
     FILE_DEFAULT_CHUNK_SIZE: int
+    DATABASE_URI_NO_PSYCOG: str
 
 def get_settings() -> Settings:
     return Settings()
