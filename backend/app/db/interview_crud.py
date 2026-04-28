@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session, selectinload
 
 from app.enums import InterviewStatus
-from app.models import Interview, InterviewQuestion
+from app.models import Interview, InterviewAnswer, InterviewQuestion
 
 
 def create_interview(
@@ -83,3 +83,92 @@ def update_interview_status(
     db.commit()
     db.refresh(interview)
     return interview
+
+
+def get_question_by_text(
+    db: Session,
+    interview_id: UUID,
+    question_text: str,
+) -> InterviewQuestion | None:
+    return (
+        db.query(InterviewQuestion)
+        .filter(
+            InterviewQuestion.interview_id == interview_id,
+            InterviewQuestion.question_text == question_text,
+        )
+        .first()
+    )
+
+
+def create_interview_question(
+    db: Session,
+    interview_id: UUID,
+    question_text: str,
+    expected_answer: str,
+    question_type: str = "technical",
+) -> InterviewQuestion:
+    existing = get_question_by_text(db, interview_id, question_text)
+    if existing is not None:
+        return existing
+
+    question = InterviewQuestion(
+        interview_id=interview_id,
+        question_text=question_text,
+        question_type=question_type,
+        expected_answer=expected_answer,
+    )
+    db.add(question)
+    db.commit()
+    db.refresh(question)
+    return question
+
+
+def get_latest_interview_question(db: Session, interview_id: UUID) -> InterviewQuestion | None:
+    return (
+        db.query(InterviewQuestion)
+        .filter(InterviewQuestion.interview_id == interview_id)
+        .order_by(InterviewQuestion.id.desc())
+        .first()
+    )
+
+
+def create_interview_answer(
+    db: Session,
+    question_id: UUID,
+    user_response: str,
+    ai_feedback: str,
+    score: int,
+    processing_time: float,
+    audio_url: str | None = None,
+) -> InterviewAnswer:
+    answer = InterviewAnswer(
+        question_id=question_id,
+        user_response=user_response,
+        ai_feedback=ai_feedback,
+        score=score,
+        processing_time=processing_time,
+        audio_url=audio_url,
+    )
+    db.add(answer)
+    db.commit()
+    db.refresh(answer)
+    return answer
+
+
+def update_interview_answer_feedback(
+    db: Session,
+    answer_id: UUID,
+    ai_feedback: str,
+    score: int,
+    processing_time: float,
+) -> InterviewAnswer | None:
+    answer = db.query(InterviewAnswer).filter(InterviewAnswer.id == answer_id).first()
+    if answer is None:
+        return None
+
+    answer.ai_feedback = ai_feedback
+    answer.score = score
+    answer.processing_time = processing_time
+    db.commit()
+    db.refresh(answer)
+    return answer
