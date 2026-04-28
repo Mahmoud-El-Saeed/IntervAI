@@ -71,6 +71,12 @@ class InterviewSessionState(TypedDict, total=False):
     """State for interactive interview flow."""
 
     interview_data: dict[str, Any]
+    resume_text: str
+    job_title: str
+    job_description: str
+    job_requirements: list[str]
+    matched_skills: list[str]
+    missing_skills: list[str]
     memory: str
     turn_index: int
     recent_topics: Annotated[list[str], operator.add]

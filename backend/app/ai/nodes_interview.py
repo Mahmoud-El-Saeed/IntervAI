@@ -80,6 +80,10 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
 
     text = state.get("resume_text", "")
     jd = state.get("job_description", "")
+    job_title = state.get("job_title", "")
+    job_requirements = list(state.get("job_requirements", []))
+    missing_skills = list(state.get("missing_skills", []))
+    matched_skills = list(state.get("matched_skills", []))
 
     # Extract potential project questions from state if available
     project_summaries = state.get("project_summaries", {})
@@ -88,8 +92,8 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
         if isinstance(summary, dict) and "potential_interview_questions" in summary:
             project_questions.extend(summary["potential_interview_questions"])
 
-    # Limit to top 5 project questions
-    project_questions = project_questions[:5]
+    # Keep project questions supplementary only
+    project_questions = project_questions[:2]
 
     parser = JsonOutputParser(pydantic_object=NextQuestion)
     prompt = ChatPromptTemplate.from_messages(
@@ -97,10 +101,18 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
             ("system", SYSTEM_STRATEGY + "\n{format_instructions}"),
             (
                 "human",
-                "Build a one-question strategy for first question.\n"
+                "Build a one-question strategy for the first interview question.\n\n"
+                "=== JOB CONTEXT ===\n"
+                "Job Title: {job_title}\n"
+                "Job Requirements: {job_requirements}\n"
+                "Missing Skills: {missing_skills}\n"
+                "Matched Skills: {matched_skills}\n\n"
+                "=== CANDIDATE BACKGROUND ===\n"
                 "Resume:\n{resume}\n\n"
-                "JD:\n{jd}\n"
-                "Available Project Questions:\n{project_questions}",
+                "Job Description:\n{jd}\n\n"
+                "=== PROJECT QUESTIONS (SECONDARY ONLY) ===\n"
+                "{project_questions}\n\n"
+                "FIRST QUESTION MUST TEST A MISSING SKILL FROM THE JOB REQUIREMENTS",
             ),
         ]
     ).partial(format_instructions=parser.get_format_instructions())
@@ -110,6 +122,10 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
             prompt,
             parser,
             {
+                "job_title": job_title,
+                "job_requirements": json.dumps(job_requirements, ensure_ascii=False),
+                "missing_skills": json.dumps(missing_skills, ensure_ascii=False),
+                "matched_skills": json.dumps(matched_skills, ensure_ascii=False),
                 "resume": text[:MAX_RESUME_LENGTH],
                 "jd": jd[:MAX_JD_LENGTH],
                 "project_questions": json.dumps(project_questions, ensure_ascii=False),
@@ -131,7 +147,6 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
     """Generate the next interview question."""
     log_progress("question_generator_node", "Generating next interview question")
 
-    history = state.get("chat_history", [])
     asked = state.get("asked_questions", [])
     answers = state.get("answers", [])
     analysis = state.get("analysis", [])
@@ -145,15 +160,27 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             "progress_message": "Interview completed",
         }
 
+    job_title = state.get("job_title", "")
+    job_requirements = list(state.get("job_requirements", []))
+    missing_skills = list(state.get("missing_skills", []))
+    matched_skills = list(state.get("matched_skills", []))
+
     # Get project questions for context
     project_summaries = state.get("project_summaries", {})
     project_questions = []
+    project_tech_stacks: dict[str, Any] = {}
     for project_name, summary in project_summaries.items():
-        if isinstance(summary, dict) and "potential_interview_questions" in summary:
+        if not isinstance(summary, dict):
+            continue
+
+        if "potential_interview_questions" in summary:
             project_questions.extend(summary["potential_interview_questions"])
+
+        if "tech_stack" in summary:
+            project_tech_stacks[project_name] = summary["tech_stack"]
     
-    # Limit to top 3 for prompt context
-    project_questions = project_questions[:3]
+    # Limit to top 2 so projects remain secondary
+    project_questions = project_questions[:2]
 
     parser = JsonOutputParser(pydantic_object=NextQuestion)
     prompt = ChatPromptTemplate.from_messages(
@@ -161,12 +188,21 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             ("system", SYSTEM_QUESTION_GENERATOR + "\n{format_instructions}"),
             (
                 "human",
-                "question_count={question_count}, max={max_q}.\n"
+                "question_count={question_count}, max={max_q}.\n\n"
+                "=== JOB CONTEXT (PRIMARY SOURCE FOR QUESTIONS) ===\n"
+                "Job Title: {job_title}\n"
+                "Job Requirements: {job_requirements}\n"
+                "Missing Skills (TEST THESE FIRST): {missing_skills}\n"
+                "Matched Skills (VERIFY DEPTH): {matched_skills}\n\n"
+                "=== CANDIDATE PROJECTS (SECONDARY ONLY) ===\n"
+                "Project Tech Stacks: {project_tech_stacks}\n"
+                "Available Project Questions: {project_questions}\n\n"
+                "=== INTERVIEW PROGRESS ===\n"
                 "Strategy: {strategy}\n"
                 "Asked: {asked}\n"
                 "Answers: {answers}\n"
-                "Analyses: {analysis}\n"
-                "Available Project Questions: {project_questions}",
+                "Analyses: {analysis}\n\n"
+                "REMEMBER: 80% of questions must test job requirements. Max one project question every five questions.",
             ),
         ]
     ).partial(format_instructions=parser.get_format_instructions())
@@ -178,11 +214,16 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             {
                 "question_count": question_count,
                 "max_q": MAX_QUESTIONS,
+                "job_title": job_title,
+                "job_requirements": json.dumps(job_requirements, ensure_ascii=False),
+                "missing_skills": json.dumps(missing_skills, ensure_ascii=False),
+                "matched_skills": json.dumps(matched_skills, ensure_ascii=False),
+                "project_tech_stacks": json.dumps(project_tech_stacks, ensure_ascii=False),
+                "project_questions": json.dumps(project_questions, ensure_ascii=False),
                 "strategy": json.dumps(strategy, ensure_ascii=False),
                 "asked": json.dumps(asked[-5:], ensure_ascii=False),
                 "answers": json.dumps(answers[-5:], ensure_ascii=False),
                 "analysis": json.dumps(analysis[-3:], ensure_ascii=False),
-                "project_questions": json.dumps(project_questions, ensure_ascii=False),
             },
             get_question_service(),
         )

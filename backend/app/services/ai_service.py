@@ -185,14 +185,31 @@ class InterviewAIService:
     def _initial_state(interview_data: dict[str, Any] | None = None) -> InterviewSessionState:
         analysis = interview_data.get("analysis", {}) if interview_data else {}
         project_summaries = analysis.get("project_summaries", {})
+        technical_evaluation = analysis.get("technical_evaluation", {}) if isinstance(analysis, dict) else {}
+
+        def _as_items(value: Any) -> list[str]:
+            if isinstance(value, dict):
+                items = value.get("items")
+                if isinstance(items, list):
+                    return [str(item) for item in items if item is not None]
+                values = value.get("values")
+                if isinstance(values, list):
+                    return [str(item) for item in values if item is not None]
+            if isinstance(value, list):
+                return [str(item) for item in value if item is not None]
+            return []
         
         resume = interview_data.get("resume", {}) if interview_data else {}
         
         return {
             "interview_data": interview_data or {},
             "project_summaries": project_summaries,
+            "job_title": interview_data.get("job_title", "") if interview_data else "",
             "resume_text": resume.get("text", ""),
             "job_description": interview_data.get("job_description", "") if interview_data else "",
+            "job_requirements": _as_items(technical_evaluation.get("job_requirements", analysis.get("job_requirements", []))),
+            "matched_skills": _as_items(analysis.get("matched_skills", {})),
+            "missing_skills": _as_items(analysis.get("missing_skills", {})),
             "memory": "",
             "turn_index": 0,
             "recent_topics": [],
