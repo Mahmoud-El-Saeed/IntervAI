@@ -22,3 +22,6 @@ class Resume(Base):
 
 	user: Mapped["User"] = relationship(back_populates="resumes")
 	interviews: Mapped[list["Interview"]] = relationship(back_populates="resume", cascade="all, delete-orphan")
+	document_embeddings: Mapped[list["DocumentEmbedding"]] = relationship(
+		"DocumentEmbedding", back_populates="resume", cascade="all, delete-orphan"
+	) 
