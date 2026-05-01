@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str 
     EMBEDDING_MODEL: str
     EMBEDDING_DIMENSION: int 
+    EMBEDDING_API_KEY: str
     DATABASE_URI: str
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str
