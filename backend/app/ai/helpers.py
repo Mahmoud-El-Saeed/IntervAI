@@ -4,7 +4,9 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 from urllib.parse import urlparse
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
+from app.core.embedder import Embedder
 from app.core.analysis_logging import get_analysis_logger
 
 logger = get_analysis_logger(__name__)
@@ -147,3 +149,26 @@ def build_final_verdict(score: float) -> str:
         return "Partial match - Improve the missing skills"
     else:
         return "Low match - Significant skill gaps to address"
+    
+
+def prepare_text_chunks_and_embeddings(text: str, context_prefix: str) -> tuple[list[str], list[list[float]]]:
+    """
+    Takes text, chunks it, adds a context prefix, and generates embeddings.
+    Returns: (list_of_prefixed_chunks, list_of_embeddings)
+    """
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    raw_chunks = splitter.split_text(text)
+    
+    clean_chunks = [chunk.strip() for chunk in raw_chunks if chunk.strip()]
+    
+    if not clean_chunks:
+        return [], []
+    
+    prefixed_chunks = [f"{context_prefix}: {chunk}" for chunk in clean_chunks]
+    
+    embedder = Embedder()
+    try:
+        embeddings = embedder.embed_documents(prefixed_chunks)
+        return prefixed_chunks, embeddings
+    except Exception as exc:
+        raise ValueError(f"Failed to generate embeddings for text chunks: {exc}") from exc

@@ -13,7 +13,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from app.core.loader import load_document_text
 from .constants import (
     MAX_SEARCH_RESULTS,
-    MAX_RESUME_LENGTH,
     MAX_JD_LENGTH,
 )
 from .exceptions import (
@@ -30,6 +29,7 @@ from .helpers import (
     calculate_overall_score,
     build_final_verdict,
     derive_project_name_from_url,
+    prepare_text_chunks_and_embeddings,
 )
 from .prompts import (
     SYSTEM_CV_EXTRACT,
@@ -59,8 +59,9 @@ from .services import (
     invoke_llm_chain,
     search_query,
     fetch_url,
+    save_project_embeddings,
 )
-from .state import InterviewState
+from .state import InterviewState, ProjectState
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,7 @@ async def extract_cv_node(state: InterviewState) -> dict[str, Any]:
         extracted_raw = await invoke_llm_chain(
             prompt,
             parser,
-            {"cv_text": cv_text[:MAX_RESUME_LENGTH]},
+            {"cv_text": cv_text},
             get_extraction_service(),
         )
         extracted = CVExtraction.model_validate(extracted_raw)
@@ -270,15 +271,15 @@ async def market_summary_node(state: InterviewState) -> dict[str, Any]:
         raise MarketAnalysisError(f"Market summarization failed: {e}") from e
 
 
-async def project_fetch_readme_node(state: InterviewState) -> dict[str, Any]:
-    """Fetch README from GitHub project."""
+async def project_fetch_readme_node(state: ProjectState) -> dict[str, Any]:
+    project_name = state.get("project_name", "").strip()
     project_url = state.get("project_url", "").strip()
-    project_name = state.get("project_name", "").strip() or derive_project_name_from_url(project_url)
-    log_progress("project_fetch_readme_node", f"Fetching README for {project_name}")
+
+    if not project_name:
+        return {}
 
     readme_text = ""
     readme_status = "No README found"
-
     for candidate_url in generate_readme_urls(project_url):
         try:
             readme_text = await fetch_url(candidate_url)
@@ -292,30 +293,29 @@ async def project_fetch_readme_node(state: InterviewState) -> dict[str, Any]:
 
     log_progress("project_fetch_readme_node", f"README status: {readme_status}")
     return {
-        "readme_status": readme_status,
-        "readme_content": readme_text,
+        "readmes_status": {project_name: readme_status},
         "project_readmes": {project_name: readme_text},
-        "project_name": project_name,
-        "project_url": project_url,
+        "readme_content": readme_text, 
+        "project_count_completed": 1,
     }
 
 
-async def project_summary_node(state: InterviewState) -> dict[str, Any]:
+async def project_summary_node(state: ProjectState) -> dict[str, Any]:
     """Summarize project README contents."""
-    project_url = state.get("project_url", "").strip()
-    project_name = state.get("project_name", "").strip() or derive_project_name_from_url(project_url)
-    log_progress("project_summary_node", f"Summarizing project {project_name}")
     
+    project_name = state.get("project_name", "").strip()
 
     readme_content = state.get("readme_content", "")
-    readme_status = state.get("readme_status", "No README found")
+    
+    log_progress("project_summary_node", f"Summarizing project {project_name}")
+    
 
     if not readme_content.strip():
         summary = {
             "tech_stack": [],
             "key_features": [],
             "potential_interview_questions": [],
-            "readme_status": readme_status,
+            "readme_status": "No README found",
             "note": "README content was not available for summarization.",
         }
     else:
@@ -339,7 +339,7 @@ async def project_summary_node(state: InterviewState) -> dict[str, Any]:
                 "tech_stack": details.tech_stack,
                 "key_features": details.key_features,
                 "potential_interview_questions": details.potential_interview_questions,
-                "readme_status": readme_status,
+                "readme_status": "README fetched",
             }
         except Exception as exc:
             logger.exception("Error summarizing project %s", project_name)
@@ -347,10 +347,26 @@ async def project_summary_node(state: InterviewState) -> dict[str, Any]:
                 "tech_stack": [],
                 "key_features": [],
                 "potential_interview_questions": [],
-                "readme_status": readme_status,
+                "readme_status": "README unavailable",
                 "error": str(exc),
             }
-    print(f"Project summary for {project_name} test test test")
+    if readme_content.strip() and "error" not in summary:
+        try:
+            resume_id = state.get("resume_id")
+            if resume_id:
+                prefix = f"Project '{project_name}' README"
+                chunks, embeddings = prepare_text_chunks_and_embeddings(readme_content, prefix)
+                
+                await asyncio.to_thread(
+                    save_project_embeddings,
+                    resume_id,
+                    chunks,
+                    embeddings
+                )
+                log_progress("project_summary_node", f"Ingested {len(chunks)} chunks for project {project_name}")
+        except Exception as e:
+            log_progress("project_summary_node", f"Embedding ingestion failed for {project_name}: {e}")
+            
     log_progress("project_summary_node", f"Project summary completed for {project_name}")
     return {
         "status_events": ["project_summarized"],

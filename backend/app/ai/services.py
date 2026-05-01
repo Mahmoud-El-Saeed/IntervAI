@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from typing import Any
+from uuid import UUID
 
 import httpx
 from langchain_core.output_parsers import JsonOutputParser
@@ -11,8 +12,10 @@ from langchain_groq import ChatGroq
 from langchain_tavily import TavilySearch
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
+from app.database import SessionLocal
 from app.core.config import get_settings
 from app.core.analysis_logging import get_analysis_logger
+from app.db.document_embedding_crud import create_document_embeddings
 from .constants import (
     LLM_DEFAULT_TEMPERATURE,
     LLM_FAST_MODEL,
@@ -137,6 +140,12 @@ def get_extraction_service() -> LLMService:
     if _llm_extraction_service is None:
         _llm_extraction_service = LLMService(model=LLM_FAST_MODEL, temperature=LLM_TEMP_EXTRACTION)
     return _llm_extraction_service
+
+def get_summary_chat_service() -> LLMService:
+    global _llm_summary_service
+    if _llm_summary_service is None:
+        _llm_summary_service = LLMService(model=LLM_FAST_MODEL, temperature=LLM_TEMP_SUMMARY)
+    return _llm_summary_service
 
 
 def get_alignment_service() -> LLMService:
@@ -327,3 +336,29 @@ async def safe_parse_json(
             continue
 
     raise LLMError(f"Could not parse JSON into {schema.__name__} after {max_attempts} attempts")
+
+def save_project_embeddings(resume_id_str: str, chunks: list[str], embeddings: list[list[float]]) -> None:
+    """
+    Synchronously save project embeddings to the database.
+    """
+
+    
+    if not chunks or not embeddings:
+        return
+
+    if len(chunks) != len(embeddings):
+        raise ValueError("Chunks count does not match embeddings count.")
+
+    db = SessionLocal()
+    try:
+        create_document_embeddings(
+            db=db,
+            resume_id=UUID(resume_id_str),
+            chunks=chunks,
+            embeddings=embeddings
+        )
+    except Exception as e:
+        db.rollback()
+        raise RuntimeError(f"Database error saving embeddings: {e}") from e
+    finally:
+        db.close()

@@ -1,11 +1,16 @@
 import os
+import asyncio
 
 import aiofiles
 from fastapi import UploadFile
 
 from app.core.config import get_settings
 from app.controller.file_controller import FileController
-from app.core.loader import load_document
+from app.core.loader import load_document, load_document_text
+from app.core.embedder import Embedder
+from app.database import SessionLocal
+from app.db.document_embedding_crud import create_document_embeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.db.resume_curd import create_resume
 from app.schemas.resume import ResumeResponse
 from uuid import UUID, uuid4
@@ -23,6 +28,42 @@ async def save_uploaded_file(upload_file: UploadFile, file_path: str, max_size_b
                 raise ValueError("File size exceeded the limit.")
             await out_file.write(content)
 
+
+def _chunk_resume_text(text: str) -> list[str]:
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    chunks = splitter.split_text(text)
+    return [chunk.strip() for chunk in chunks if chunk.strip()]
+
+
+def _embed_resume_chunks(chunks: list[str]) -> list[list[float]]:
+    embedder = Embedder()
+    try:
+        return embedder.embed_documents(chunks)
+    except Exception as exc:
+        raise ValueError("Failed to generate embeddings for resume chunks.") from exc
+
+
+
+def _ingest_resume_embeddings(resume_id: UUID, file_path: str) -> None:
+    """Ingest resume text chunks into the vector database."""
+    try:
+        text = load_document_text(file_path)
+        chunks = _chunk_resume_text(text)
+        
+        if not chunks:
+            return
+
+        embeddings = _embed_resume_chunks(chunks)
+        db = SessionLocal()
+        try:
+            create_document_embeddings(db, resume_id, chunks, embeddings)
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+    except Exception as exc:
+        raise RuntimeError(f"Embedding ingestion failed: {exc}") from exc
 
 async def handle_resume_upload(db: Session, user_id: UUID, upload_file: UploadFile) -> ResumeResponse:
     """Handle the resume upload process, including validation, saving, and database record creation."""
@@ -48,6 +89,14 @@ async def handle_resume_upload(db: Session, user_id: UUID, upload_file: UploadFi
             file_path=file_path,
             extracted_data=document,
         )
+        db.commit() # Commit the transaction before starting the embedding process
+        try:
+            await asyncio.to_thread(_ingest_resume_embeddings, resume_id, file_path)
+        except Exception:
+            db.delete(resume)  
+            db.commit()
+            raise ValueError("Failed to process resume embeddings. Please try uploading again.")
+        
         return ResumeResponse.model_validate(resume)
     except ValueError:
         if os.path.exists(file_path):

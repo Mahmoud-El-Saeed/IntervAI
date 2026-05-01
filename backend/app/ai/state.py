@@ -22,7 +22,7 @@ class InterviewState(TypedDict, total=False):
     """State for resume analysis and interview flows."""
 
     interview_id: str
-    resume_id: str
+    resume_id: Annotated[str, lambda a, b: b]
     resume_path: str
     job_title: str
     job_description: str
@@ -54,10 +54,7 @@ class InterviewState(TypedDict, total=False):
     market_summary: dict[str, Any]
     market_analysis_completed: bool
 
-    project_name: str
-    project_url: str
-    readme_content: str
-    readme_status: str
+    readmes_status: Annotated[dict[str, str], operator.or_]
     project_readmes: Annotated[dict[str, str], operator.or_]
     project_summaries: Annotated[dict[str, dict[str, Any]], operator.or_]
     project_errors: Annotated[dict[str, str], operator.or_]
@@ -87,6 +84,7 @@ class InterviewSessionState(TypedDict, total=False):
     hint_counter: int
     difficulty_level: str
     chat_history: Annotated[list[dict[str, Any]], operator.add]
+    full_transcript: Annotated[list[str], operator.add]
     interview_score: float
     total_questions_asked: int
     low_score_streak: int
@@ -115,3 +113,23 @@ class InterviewSessionState(TypedDict, total=False):
     project_summaries: dict[str, dict[str, Any]]
     potential_project_questions: Annotated[list[str], operator.add]
     project_questions_asked: Annotated[list[str], operator.add]
+    
+
+class ProjectState(TypedDict, total=False):
+    """Private state for a single project's fetch+summarize pipeline."""
+    # Inputs from Send
+    project_name: str
+    project_url: str
+    resume_id: Annotated[str, lambda a, b: b] # last write wins
+
+    # Internal
+    readme_content: str
+
+    # Outputs merged back into InterviewState
+    readmes_status: Annotated[dict[str, str], operator.or_]
+    project_readmes: Annotated[dict[str, str], operator.or_]
+    project_summaries: Annotated[dict[str, dict[str, Any]], operator.or_]
+    project_errors: Annotated[dict[str, str], operator.or_]
+    project_count_completed: Annotated[int, operator.add]
+    status_events: Annotated[list[str], operator.add]
+    progress_events: Annotated[list[str], operator.add]

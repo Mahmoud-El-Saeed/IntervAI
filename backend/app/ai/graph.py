@@ -27,29 +27,44 @@ from .nodes_interview import (
     hint_node,
     evaluator_node,
     generate_final_report_node,
+    summarize_history_node,
 )
-from .state import InterviewState, InterviewSessionState
+from .state import InterviewState, InterviewSessionState, ProjectState
+
 
 logger = logging.getLogger(__name__)
+
+def _build_project_subgraph() -> StateGraph:
+    """Isolated fetch+summarize pipeline for one project."""
+    builder = StateGraph(ProjectState)
+    builder.add_node("project_fetch_readme", project_fetch_readme_node)
+    builder.add_node("project_summary", project_summary_node)
+    builder.add_edge(START, "project_fetch_readme")
+    builder.add_edge("project_fetch_readme", "project_summary")
+    builder.add_edge("project_summary", END)
+    return builder.compile()
 
 
 def route_after_validation(state: InterviewState) -> list[str | Send]:
     """Route after validation to market intelligence and parallel project fetching."""
     destinations: list[str | Send] = ["market_intelligence"]
     project_links = state.get("project_links", {})
+    cv_text = state.get("cv_text", "")
+    resume_id = state.get("resume_id", "")
+
     for project_name, project_url in project_links.items():
         destinations.append(
             Send(
-                "project_fetch_readme",
+                "project_pipeline",  
                 {
                     "project_name": project_name,
                     "project_url": project_url,
-                    "readme_content": "",
-                    "readme_status": "pending",
+                    "resume_id": resume_id,
                 },
             )
         )
     return destinations
+
 
 
 def _build_graph() -> StateGraph[InterviewState]:
@@ -61,8 +76,7 @@ def _build_graph() -> StateGraph[InterviewState]:
     builder.add_node("validate_alignment", validation_node)
     builder.add_node("market_intelligence", market_intelligence_node)
     builder.add_node("market_summary", market_summary_node)
-    builder.add_node("project_fetch_readme", project_fetch_readme_node)
-    builder.add_node("project_summary", project_summary_node)
+    builder.add_node("project_pipeline", _build_project_subgraph())  
     builder.add_node("finalize_analysis", finalize_analysis_node)
 
     builder.add_edge(START, "extract_cv")
@@ -71,8 +85,7 @@ def _build_graph() -> StateGraph[InterviewState]:
     builder.add_conditional_edges("validate_alignment", route_after_validation)
     builder.add_edge("market_intelligence", "market_summary")
     builder.add_edge("market_summary", "finalize_analysis")
-    builder.add_edge("project_fetch_readme", "project_summary")
-    builder.add_edge("project_summary", "finalize_analysis")
+    builder.add_edge("project_pipeline", "finalize_analysis")
     builder.add_edge("finalize_analysis", END)
 
     return builder
@@ -99,6 +112,12 @@ def route_after_evaluation(state: InterviewSessionState) -> str:
     """Route after evaluation based on question count."""
     if state.get("total_questions_asked", state.get("question_count", 0)) >= MAX_QUESTIONS:
         return "generate_final_report_node"
+    
+    turn_index = state.get("turn_index", 0)
+    
+    if (turn_index + 1) % 3 == 0 and turn_index > 0:
+        return "summarize_node" 
+    
     return "question_generator_node"
 
 
@@ -111,6 +130,7 @@ def _build_interview_graph() -> StateGraph[InterviewSessionState]:
     builder.add_node("human_input_node", human_input_node)
     builder.add_node("analyzer_node", analyzer_node)
     builder.add_node("hint_node", hint_node)
+    builder.add_node("summarize_node", summarize_history_node)
     builder.add_node("evaluator_node", evaluator_node)
     builder.add_node("generate_final_report_node", generate_final_report_node)
 
@@ -123,6 +143,7 @@ def _build_interview_graph() -> StateGraph[InterviewSessionState]:
     builder.add_conditional_edges("analyzer_node", route_after_analyzer)
     builder.add_conditional_edges("hint_node", route_after_hint)
     builder.add_conditional_edges("evaluator_node", route_after_evaluation)
+    builder.add_edge("summarize_node", "question_generator_node")
     builder.add_edge("generate_final_report_node", END)
 
     return builder

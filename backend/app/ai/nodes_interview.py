@@ -6,11 +6,13 @@ import asyncio
 import datetime as dt
 import json
 from typing import Any
+import uuid
 
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.types import interrupt
 
+from app.core.retrieval import retrieve_relevant_cv_chunks
 from .constants import MAX_QUESTIONS, MAX_RESUME_LENGTH, MAX_JD_LENGTH, MAX_HINT_COUNT
 from .exceptions import InterviewError, LLMError
 from .helpers import log_progress, build_msg
@@ -22,6 +24,7 @@ from .prompts import (
     SYSTEM_HINT,
     SYSTEM_EVALUATOR,
     SYSTEM_FINAL_REPORT,
+    SYSTEM_CHAT_SUMMARY,
 )
 from .schemas import (
     NextQuestion,
@@ -37,8 +40,11 @@ from .services import (
     get_evaluation_service,
     get_report_service,
     invoke_llm_chain,
+    get_summary_chat_service,
 )
 from .state import InterviewSessionState
+
+from app.core.retrieval import retrieve_relevant_cv_chunks
 
 
 _HINT_RATE_LIMIT_RETRY_DELAY_SECONDS = 1.5
@@ -144,7 +150,6 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
 
 
 async def question_generator_node(state: InterviewSessionState) -> dict[str, Any]:
-    """Generate the next interview question."""
     log_progress("question_generator_node", "Generating next interview question")
 
     asked = state.get("asked_questions", [])
@@ -160,50 +165,68 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             "progress_message": "Interview completed",
         }
 
-    job_title = state.get("job_title", "")
-    job_requirements = list(state.get("job_requirements", []))
     missing_skills = list(state.get("missing_skills", []))
     matched_skills = list(state.get("matched_skills", []))
-
-    # Get project questions for context
-    project_summaries = state.get("project_summaries", {})
-    project_questions = []
-    project_tech_stacks: dict[str, Any] = {}
-    for project_name, summary in project_summaries.items():
-        if not isinstance(summary, dict):
-            continue
-
-        if "potential_interview_questions" in summary:
-            project_questions.extend(summary["potential_interview_questions"])
-
-        if "tech_stack" in summary:
-            project_tech_stacks[project_name] = summary["tech_stack"]
     
-    # Limit to top 2 so projects remain secondary
-    project_questions = project_questions[:2]
+    all_skills = missing_skills + matched_skills
+    
+    target_skill = None
+    if question_count < len(all_skills):
+        target_skill = all_skills[question_count]
+    elif all_skills:
+        target_skill = all_skills[0]
+    else:
+        target_skill = "General"
+
+    rag_context = ""
+    question_instruction_type = "GENERAL"
+    
+    if target_skill:
+        try:
+            interview_data = state.get("interview_data", {})
+            resume_id_str = interview_data.get("resume_id")
+            
+            if resume_id_str:
+                search_query = f"How {target_skill} was implemented in project"
+                chunks = await retrieve_relevant_cv_chunks(
+                    resume_id=uuid.UUID(resume_id_str),
+                    query_text=search_query,
+                    top_k=1
+                )
+                
+                if chunks:
+                    rag_context = chunks[0]
+                else:
+                    rag_context = ""
+                    log_progress("question_generator_node", "No strong RAG context found, switching to general logic via prompt")
+        except Exception as e:
+            log_progress("question_generator_node", f"RAG search failed: {e}")
+            rag_context = ""
+
 
     parser = JsonOutputParser(pydantic_object=NextQuestion)
+    prompt_content = (
+            "Target Skill: {target_skill}\n\n"
+            "=== RETRIEVED CONTEXT (From Resume/Projects) ===\n"
+            "{rag_context}\n\n"
+            "=== INSTRUCTIONS ===\n"
+            "You must ask a question about '{target_skill}'.\n"
+            "DECISION LOGIC:\n"
+            "- If the RETRIEVED CONTEXT above contains detailed implementation details (algorithms, architecture, specific code patterns), "
+            "ask a SPECIFIC question based on that context (e.g., 'In your project regarding X, how did you handle Y?').\n"
+            "- If the RETRIEVED CONTEXT is empty, generic, or only lists tool names, "
+            "ask a GENERAL CONCEPTUAL question (e.g., 'What are the trade-offs of using X?').\n\n"
+            "=== OTHER CONTEXT ===\n"
+            "Job Title: {job_title}\n"
+            "Job Requirements: {job_requirements}\n"
+            "Previous Answers: {answers}\n"
+            "REMEMBER: Be conversational."
+        )
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", SYSTEM_QUESTION_GENERATOR + "\n{format_instructions}"),
-            (
-                "human",
-                "question_count={question_count}, max={max_q}.\n\n"
-                "=== JOB CONTEXT (PRIMARY SOURCE FOR QUESTIONS) ===\n"
-                "Job Title: {job_title}\n"
-                "Job Requirements: {job_requirements}\n"
-                "Missing Skills (TEST THESE FIRST): {missing_skills}\n"
-                "Matched Skills (VERIFY DEPTH): {matched_skills}\n\n"
-                "=== CANDIDATE PROJECTS (SECONDARY ONLY) ===\n"
-                "Project Tech Stacks: {project_tech_stacks}\n"
-                "Available Project Questions: {project_questions}\n\n"
-                "=== INTERVIEW PROGRESS ===\n"
-                "Strategy: {strategy}\n"
-                "Asked: {asked}\n"
-                "Answers: {answers}\n"
-                "Analyses: {analysis}\n\n"
-                "REMEMBER: 80% of questions must test job requirements. Max one project question every five questions.",
-            ),
+            ("human", prompt_content),
         ]
     ).partial(format_instructions=parser.get_format_instructions())
 
@@ -212,18 +235,11 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             prompt,
             parser,
             {
-                "question_count": question_count,
-                "max_q": MAX_QUESTIONS,
-                "job_title": job_title,
-                "job_requirements": json.dumps(job_requirements, ensure_ascii=False),
-                "missing_skills": json.dumps(missing_skills, ensure_ascii=False),
-                "matched_skills": json.dumps(matched_skills, ensure_ascii=False),
-                "project_tech_stacks": json.dumps(project_tech_stacks, ensure_ascii=False),
-                "project_questions": json.dumps(project_questions, ensure_ascii=False),
-                "strategy": json.dumps(strategy, ensure_ascii=False),
-                "asked": json.dumps(asked[-5:], ensure_ascii=False),
-                "answers": json.dumps(answers[-5:], ensure_ascii=False),
-                "analysis": json.dumps(analysis[-3:], ensure_ascii=False),
+                "target_skill": target_skill,
+                "rag_context": rag_context,
+                "job_title": state.get("job_title", ""),
+                "job_requirements": json.dumps(list(state.get("job_requirements", [])), ensure_ascii=False),
+                "answers": json.dumps(asked[-1:], ensure_ascii=False),
             },
             get_question_service(),
         )
@@ -232,24 +248,27 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
         expected_answer = out.get("expected_answer", "").strip()
 
         log_progress("question_generator_node", f"Question {question_count + 1} generated")
-        return {
-            "current_question": question,
-            "expected_answer": expected_answer,
-            "chat_history": [build_msg("ai", question)],
-            "asked_questions": [question],
-            "question_count": question_count + 1,
-            "total_questions_asked": question_count + 1,
-            "hint_count": 0,
-            "hint_counter": 0,
-            "request_hint": False,
-            "force_move_next": False,
-            "forced_penalty": 0,
-            "status": "awaiting_answer",
-            "progress_message": f"Question {question_count + 1} generated",
-        }
+    
     except Exception as e:
         log_progress("question_generator_node", f"Question generation failed: {e}")
-        raise InterviewError(f"Question generator failed: {e}") from e
+        question = "Could you tell me more about your experience with the technologies we discussed?"
+        expected_answer = ""
+
+    return {
+        "current_question": question,
+        "expected_answer": expected_answer,
+        "chat_history": [build_msg("ai", question)],
+        "asked_questions": [question],
+        "question_count": question_count + 1,
+        "total_questions_asked": question_count + 1,
+        "hint_count": 0,
+        "hint_counter": 0,
+        "request_hint": False,
+        "force_move_next": False,
+        "forced_penalty": 0,
+        "status": "awaiting_answer",
+        "progress_message": f"Question {question_count + 1} generated",
+    }
 
 
 async def human_input_node(state: InterviewSessionState) -> dict[str, Any]:
@@ -276,13 +295,34 @@ async def analyzer_node(state: InterviewSessionState) -> dict[str, Any]:
     answer_text = str(answer).strip()
     request_hint = "hint" in answer_text.lower()
 
+    interview_data = state.get("interview_data", {})
+    resume_id = interview_data.get("resume_id")
+    
+    cv_context = ""
+    
+    if resume_id:
+        try:
+            search_query = f"Question: {question}\nAnswer: {answer}"
+            
+            relevant_chunks = await retrieve_relevant_cv_chunks(
+                resume_id=uuid.UUID(resume_id),
+                query_text=search_query,
+                top_k=3
+            )
+            
+            if relevant_chunks:
+                cv_context = "\n\n--- FROM CANDIDATE'S RESUME (Reference) ---\n" + "\n\n".join(relevant_chunks)
+                
+        except Exception as e:
+            log_progress("analyzer_node", f"RAG retrieval failed: {e}")
+
     parser = JsonOutputParser(pydantic_object=AnalysisResult)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", SYSTEM_ANALYZER + "\n{format_instructions}"),
-            ("human", "Question: {q}\nAnswer: {a}"),
+            ("human", "Question: {q}\nAnswer: {a}")
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    ).partial(cv_context=cv_context, format_instructions=parser.get_format_instructions())
 
     try:
         out = await invoke_llm_chain(
@@ -534,24 +574,52 @@ async def generate_final_report_node(state: InterviewSessionState) -> dict[str, 
     log_progress("generate_final_report_node", "Generating final interview report")
 
     parser = JsonOutputParser(pydantic_object=FinalReportResult)
+    
+    full_transcript = state.get("full_transcript", [])
+    
+    if full_transcript:
+        human_message_text = (
+            "Full Interview Transcript:\n{transcript}\n\n"
+            "Detailed Analysis & Evaluation Data:\n"
+            "Analysis: {an}\n"
+            "Evaluations: {ev}\n"
+            "Current Calculated Score: {fs}"
+        )
+        payload = {
+            "transcript": "\n".join(full_transcript),
+            "an": json.dumps(state.get("analysis", []), ensure_ascii=False),
+            "ev": json.dumps(state.get("evaluation", []), ensure_ascii=False),
+            "fs": state.get("interview_score", 0),
+        }
+    else:
+        human_message_text = (
+            "Questions: {q}\n"
+            "Answers: {a}\n"
+            "Analysis: {an}\n"
+            "Evaluation: {ev}\n"
+            "Final Score: {fs}"
+        )
+        
+        payload = {
+            "q": json.dumps(state.get("asked_questions", []), ensure_ascii=False),
+            "a": json.dumps(state.get("answers", []), ensure_ascii=False),
+            "an": json.dumps(state.get("analysis", []), ensure_ascii=False),
+            "ev": json.dumps(state.get("evaluation", []), ensure_ascii=False),
+            "fs": state.get("interview_score", 0),
+        }
+    
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", SYSTEM_FINAL_REPORT + "\n{format_instructions}"),
-            ("human", "Questions: {q}\nAnswers: {a}\nAnalysis: {an}\nEvaluation: {ev}\nFinal Score: {fs}"),
+            ("human", human_message_text),
         ]
     ).partial(format_instructions=parser.get_format_instructions())
-
+    
     try:
         out = await invoke_llm_chain(
             prompt,
             parser,
-            {
-                "q": json.dumps(state.get("asked_questions", []), ensure_ascii=False),
-                "a": json.dumps(state.get("answers", []), ensure_ascii=False),
-                "an": json.dumps(state.get("analysis", []), ensure_ascii=False),
-                "ev": json.dumps(state.get("evaluation", []), ensure_ascii=False),
-                "fs": state.get("interview_score", 0),
-            },
+            payload,
             get_report_service(),
         )
 
@@ -574,3 +642,45 @@ async def generate_final_report_node(state: InterviewSessionState) -> dict[str, 
     except Exception as e:
         log_progress("generate_final_report_node", f"Report generation failed: {e}")
         raise InterviewError(f"Final report generation failed: {e}") from e
+    
+
+async def summarize_history_node(state: InterviewSessionState) -> dict[str, Any]:
+    """Summarizes the conversation history to save context window and cost."""
+    log_progress("summarize_history_node", "Compressing interview history")
+
+    current_history = state.get("chat_history", [])
+    
+
+    if len(current_history) < 6: 
+        return {}
+
+    history_text_for_archive = [f"{msg.get('role')}: {msg.get('content')}" for msg in current_history]
+    
+    
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_CHAT_SUMMARY),
+        ("human", "Conversation History:\n{history}")
+    ])
+    
+    summary = ""
+    try:
+        chain = prompt | get_summary_chat_service().client
+        summary_output = await chain.ainvoke({"history": "\n".join(history_text_for_archive)})
+        summary = str(summary_output).strip()
+    except Exception as e:
+        log_progress("summarize_history_node", f"Summarization failed, keeping history: {e}")
+        return {} 
+
+    last_turn = current_history[-2:] if len(current_history) >= 2 else current_history
+    
+    system_context_msg = {
+        "role": "system", 
+        "content": f"INTERVIEW SUMMARY SO FAR:\n{summary}\n\nContinue the interview based on this summary and the latest answer."
+    }
+    
+    log_progress("summarize_history_node", "History compressed successfully")
+    
+    return {
+        "chat_history": [system_context_msg] + last_turn,
+        "full_transcript": history_text_for_archive
+    }
