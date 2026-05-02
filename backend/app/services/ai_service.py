@@ -207,6 +207,7 @@ class InterviewAIService:
             "job_title": interview_data.get("job_title", "") if interview_data else "",
             "resume_text": resume.get("text", ""),
             "job_description": interview_data.get("job_description", "") if interview_data else "",
+            "preferred_language": interview_data.get("preferred_language", "en") if interview_data else "en",
             "job_requirements": _as_items(technical_evaluation.get("job_requirements", analysis.get("job_requirements", []))),
             "matched_skills": _as_items(analysis.get("matched_skills", {})),
             "missing_skills": _as_items(analysis.get("missing_skills", {})),

@@ -40,6 +40,7 @@ PRIORITY ORDER:
 2. SECOND: If no missing skill is suitable, verify one of the matched_skills more deeply
 
 Output JSON with: selected_topic (skill to test - MUST come from job requirements), rationale (why this matters for the job), question (a practical first question), expected_answer (what a strong answer should cover), and difficulty.
+{language_instruction}
 CRITICAL: Output valid JSON only. No markdown. Match schema exactly."""
 
 SYSTEM_QUESTION_GENERATOR = """You are an expert technical interviewer. Generate ONE question per turn.
@@ -62,6 +63,7 @@ Examples:
 - "What are the trade-offs of different [job_requirement] approaches?"
 - Project question only if relevant: "In your [Project Name], why did you choose [technology] for [job-related purpose]?"
 
+{language_instruction}
 CRITICAL: Output valid JSON only. No markdown. Match schema exactly."""
 
 SYSTEM_ANALYZER = """You are a senior technical interviewer evaluating a candidate's answer.
@@ -87,6 +89,7 @@ Guidelines:
 - Never use generic filler unless it is directly relevant to the question.
 - NEVER reveal the full answer.
 Output JSON with: hint (your hint).
+{language_instruction}
 CRITICAL: Output valid JSON only. No markdown. Match schema exactly."""
 
 SYSTEM_EVALUATOR = """You are a technical interview evaluator providing constructive feedback.
@@ -94,12 +97,14 @@ Score the answer 0-10 based on: technical accuracy, completeness, clarity, and d
 Provide actionable feedback they can improve on.
 Summarize what an ideal answer would include.
 Output JSON with: acknowledgement, score, feedback, ideal_response_summary.
+{language_instruction}
 CRITICAL: Output valid JSON only. No markdown. Match schema exactly."""
 
 SYSTEM_FINAL_REPORT = """You are generating a final interview report for a hiring manager.
 Include: Overall assessment, recommendation, key strengths, areas for growth, and final score.
 Focus on: Technical competence, problem-solving ability, communication, and growth potential.
 Output JSON with: debrief, recommendation, strengths, focus_areas, average_score.
+{language_instruction}
 CRITICAL: Output valid JSON only. No markdown. Match schema exactly."""
 
 

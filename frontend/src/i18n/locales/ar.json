@@ -1,0 +1,61 @@
+{
+  "common": {
+    "dashboard": "لوحة التحكم",
+    "interviewHistory": "سجل المقابلات",
+    "settings": "الإعدادات",
+    "signOut": "تسجيل الخروج"
+  },
+  "appShell": {
+    "technicalPlatform": "المنصة التقنية",
+    "switchToArabic": "العربية",
+    "switchToEnglish": "English"
+  },
+  "dashboard": {
+    "interviewIntelligence": "ذكاء المقابلات",
+    "interviewHistory": "سجل المقابلات",
+    "reviewPerformance": "راجع مقاييس الأداء التقنية وابدأ جلسات مقابلات جديدة.",
+    "selectResume": "اختر السيرة الذاتية",
+    "initiateNewSession": "بدء جلسة جديدة",
+    "initiating": "جاري البدء...",
+    "creatingInterview": "جاري إنشاء المقابلة...",
+    "analyzingResume": "جاري تحليل السيرة الذاتية...",
+    "startingInterview": "جاري بدء المقابلة...",
+    "totalSessions": "إجمالي الجلسات",
+    "completed": "مكتملة",
+    "inProgress": "قيد التنفيذ",
+    "sessionConfiguration": "إعدادات الجلسة",
+    "jobTitle": "المسمى الوظيفي",
+    "preferredLanguage": "اللغة المفضلة",
+    "selectedResume": "السيرة الذاتية المختارة",
+    "noResumeSelected": "لم يتم اختيار سيرية ذاتية",
+    "jobDescription": "وصف الوظيفة",
+    "english": "English",
+    "arabic": "العربية (Arabic)",
+    "sessionSetupFailed": "فشل إعداد الجلسة",
+    "cancel": "إلغاء",
+    "retry": "إعادة المحاولة",
+    "noInterviews": "لا توجد مقابلات بعد. ابدأ جلسة جديدة لتظهر هنا.",
+    "loadingHistory": "جاري تحميل سجل المقابلات..."
+  },
+  "interview": {
+    "liveInterview": "مقابلة مباشرة",
+    "session": "جلسة",
+    "connected": "متصل",
+    "reconnecting": "جاري إعادة الاتصال",
+    "disconnected": "غير متصل",
+    "connectionError": "خطأ في الاتصال",
+    "connecting": "جاري الاتصال",
+    "currentQuestion": "السؤال الحالي",
+    "waitingForQuestion": "في انتظار السؤال الأول...",
+    "sessionState": "حالة الجلسة",
+    "score": "النتيجة",
+    "questionsAsked": "الأسئلة المطروحة",
+    "difficulty": "مستوى الصعوبة",
+    "topic": "الموضوع",
+    "resyncState": "مزامنة الحالة",
+    "typeYourAnswer": "اكتب إجابتك...",
+    "send": "إرسال",
+    "hint": "تلميح",
+    "evaluation": "تقييم"
+  }
+}

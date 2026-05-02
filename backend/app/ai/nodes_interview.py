@@ -50,6 +50,13 @@ from app.core.retrieval import retrieve_relevant_cv_chunks
 _HINT_RATE_LIMIT_RETRY_DELAY_SECONDS = 1.5
 
 
+def _get_language_directive(preferred_language: str) -> str:
+    """Returns language instruction for user-facing prompts."""
+    if preferred_language == 'ar':
+        return "IMPORTANT: You MUST respond in Arabic. Write all questions, feedback, hints, and responses in Arabic only. Do NOT write in English."
+    return "IMPORTANT: You MUST respond in English. Write all questions, feedback, hints, and responses in English only."
+
+
 def _is_rate_limit_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "429" in message or "rate limit" in message or "rate_limit_exceeded" in message
@@ -101,10 +108,14 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
     # Keep project questions supplementary only
     project_questions = project_questions[:2]
 
+    print(f"Preferred language for strategy node: {state.get("preferred_language", "i don't found")}")
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
+
     parser = JsonOutputParser(pydantic_object=NextQuestion)
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_STRATEGY + "\n{format_instructions}"),
+            ("system", SYSTEM_STRATEGY + "\n{language_instruction}\n{format_instructions}"),
             (
                 "human",
                 "Build a one-question strategy for the first interview question.\n\n"
@@ -121,7 +132,7 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
                 "FIRST QUESTION MUST TEST A MISSING SKILL FROM THE JOB REQUIREMENTS",
             ),
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    ).partial(format_instructions=parser.get_format_instructions(), language_instruction=lang_directive)
 
     try:
         out = await invoke_llm_chain(
@@ -204,6 +215,9 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             rag_context = ""
 
 
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
+
     parser = JsonOutputParser(pydantic_object=NextQuestion)
     prompt_content = (
             "Target Skill: {target_skill}\n\n"
@@ -225,10 +239,10 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
 
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_QUESTION_GENERATOR + "\n{format_instructions}"),
+            ("system", SYSTEM_QUESTION_GENERATOR + "\n{language_instruction}\n{format_instructions}"),
             ("human", prompt_content),
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    ).partial(format_instructions=parser.get_format_instructions(), language_instruction=lang_directive)
 
     try:
         out = await invoke_llm_chain(
@@ -376,11 +390,13 @@ async def hint_node(state: InterviewSessionState) -> dict[str, Any]:
 
     answer = (state.get("answers") or [""])[-1]
     project_summaries = state.get("project_summaries", {})
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
 
     parser = JsonOutputParser()
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_HINT),
+            ("system", SYSTEM_HINT + "\n{language_instruction}"),
             (
                 "human",
                 "Question: {q}\nExpected answer: {expected_answer}\nCandidate answer: {a}\n"
@@ -388,7 +404,7 @@ async def hint_node(state: InterviewSessionState) -> dict[str, Any]:
                 "Return JSON with key 'hint'.",
             ),
         ]
-    )
+    ).partial(language_instruction=lang_directive)
 
     try:
         out = await invoke_llm_chain(
@@ -513,12 +529,15 @@ async def evaluator_node(state: InterviewSessionState) -> dict[str, Any]:
         }
 
     parser = JsonOutputParser(pydantic_object=EvaluationResult)
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_EVALUATOR + "\n{format_instructions}"),
+            ("system", SYSTEM_EVALUATOR + "\n{language_instruction}\n{format_instructions}"),
             ("human", "Analysis JSON: {analysis}"),
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    ).partial(format_instructions=parser.get_format_instructions(), language_instruction=lang_directive)
 
     try:
         out = await invoke_llm_chain(
@@ -608,12 +627,15 @@ async def generate_final_report_node(state: InterviewSessionState) -> dict[str, 
             "fs": state.get("interview_score", 0),
         }
     
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
+
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", SYSTEM_FINAL_REPORT + "\n{format_instructions}"),
+            ("system", SYSTEM_FINAL_REPORT + "\n{language_instruction}\n{format_instructions}"),
             ("human", human_message_text),
         ]
-    ).partial(format_instructions=parser.get_format_instructions())
+    ).partial(format_instructions=parser.get_format_instructions(), language_instruction=lang_directive)
     
     try:
         out = await invoke_llm_chain(

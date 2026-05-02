@@ -1,22 +1,42 @@
-import { BarChart3, Clock3, LogOut, Settings2 } from 'lucide-react';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { BarChart3, Clock3, LogOut, Settings2, Globe } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuthStore } from '../../store/authStore';
+import { useLanguageStore } from '../../store/languageStore';
 import { cn } from '../../lib/utils';
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-  { to: '/dashboard/history', label: 'Interview History', icon: Clock3 },
-  { to: '/dashboard/settings', label: 'Settings', icon: Settings2 },
+  { to: '/dashboard', labelKey: 'common.dashboard', icon: BarChart3 },
+  { to: '/dashboard/history', labelKey: 'common.interviewHistory', icon: Clock3 },
+  { to: '/dashboard/settings', labelKey: 'common.settings', icon: Settings2 },
 ];
 
 export function AppShell() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
+  const currentLanguage = useLanguageStore((state) => state.currentLanguage);
+  const setLanguage = useLanguageStore((state) => state.setLanguage);
+  const hydrateLanguage = useLanguageStore((state) => state.hydrateLanguage);
+
+  useEffect(() => {
+    hydrateLanguage();
+  }, [hydrateLanguage]);
+
+  useEffect(() => {
+    document.documentElement.lang = currentLanguage;
+    document.documentElement.dir = currentLanguage === 'ar' ? 'rtl' : 'ltr';
+  }, [currentLanguage]);
 
   const onLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const toggleLanguage = () => {
+    setLanguage(currentLanguage === 'en' ? 'ar' : 'en');
   };
 
   return (
@@ -25,11 +45,20 @@ export function AppShell() {
         <aside className="border-r border-outline-variant/60 bg-surface-container-low/40 p-6 backdrop-blur-xl">
           <div className="mb-12">
             <p className="font-code text-xs uppercase tracking-[0.14em] text-primary">IntervAI</p>
-            <h1 className="mt-2 font-headline text-2xl font-bold">Technical Platform</h1>
+            <h1 className="mt-2 font-headline text-2xl font-bold">{t('appShell.technicalPlatform')}</h1>
           </div>
 
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className="mb-6 flex w-full items-center justify-center gap-2 rounded-md border border-outline-variant/70 px-3 py-2 text-sm text-on-surface-variant transition hover:bg-surface-container-high/70 hover:text-on-surface"
+          >
+            <Globe size={16} />
+            <span>{currentLanguage === 'en' ? t('appShell.switchToArabic') : t('appShell.switchToEnglish')}</span>
+          </button>
+
           <nav className="space-y-2">
-            {navItems.map(({ to, label, icon: Icon }) => (
+            {navItems.map(({ to, labelKey, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -43,7 +72,7 @@ export function AppShell() {
                 }
               >
                 <Icon size={16} />
-                <span>{label}</span>
+                <span>{t(labelKey)}</span>
               </NavLink>
             ))}
           </nav>
@@ -54,7 +83,7 @@ export function AppShell() {
             className="mt-12 flex w-full items-center gap-3 rounded-md border border-outline-variant/70 px-3 py-2 text-sm text-on-surface-variant transition hover:bg-surface-container-high/70 hover:text-on-surface"
           >
             <LogOut size={16} />
-            Sign out
+            {t('common.signOut')}
           </button>
         </aside>
 

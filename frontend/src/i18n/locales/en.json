@@ -1,0 +1,61 @@
+{
+  "common": {
+    "dashboard": "Dashboard",
+    "interviewHistory": "Interview History",
+    "settings": "Settings",
+    "signOut": "Sign out"
+  },
+  "appShell": {
+    "technicalPlatform": "Technical Platform",
+    "switchToArabic": "العربية",
+    "switchToEnglish": "English"
+  },
+  "dashboard": {
+    "interviewIntelligence": "Interview Intelligence",
+    "interviewHistory": "Interview History",
+    "reviewPerformance": "Review technical performance metrics and initiate new interview sessions.",
+    "selectResume": "Select Resume",
+    "initiateNewSession": "Initiate New Session",
+    "initiating": "Initiating...",
+    "creatingInterview": "Creating Interview...",
+    "analyzingResume": "Analyzing Resume...",
+    "startingInterview": "Starting Interview...",
+    "totalSessions": "Total Sessions",
+    "completed": "Completed",
+    "inProgress": "In Progress",
+    "sessionConfiguration": "Session Configuration",
+    "jobTitle": "Job title",
+    "preferredLanguage": "Preferred language",
+    "selectedResume": "Selected resume",
+    "noResumeSelected": "No resume selected",
+    "jobDescription": "Job description",
+    "english": "English",
+    "arabic": "العربية (Arabic)",
+    "sessionSetupFailed": "Session Setup Failed",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "noInterviews": "No interviews yet. Start a new session to see it appear here.",
+    "loadingHistory": "Loading interview history..."
+  },
+  "interview": {
+    "liveInterview": "Live Interview",
+    "session": "Session",
+    "connected": "Connected",
+    "reconnecting": "Reconnecting",
+    "disconnected": "Disconnected",
+    "connectionError": "Connection error",
+    "connecting": "Connecting",
+    "currentQuestion": "Current Question",
+    "waitingForQuestion": "Waiting for first question...",
+    "sessionState": "Session State",
+    "score": "Score",
+    "questionsAsked": "Questions Asked",
+    "difficulty": "Difficulty",
+    "topic": "Topic",
+    "resyncState": "Resync State",
+    "typeYourAnswer": "Type your answer...",
+    "send": "Send",
+    "hint": "Hint",
+    "evaluation": "Evaluation"
+  }
+}

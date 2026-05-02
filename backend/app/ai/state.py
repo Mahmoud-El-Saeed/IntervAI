@@ -71,6 +71,7 @@ class InterviewSessionState(TypedDict, total=False):
     resume_text: str
     job_title: str
     job_description: str
+    preferred_language: str
     job_requirements: list[str]
     matched_skills: list[str]
     missing_skills: list[str]

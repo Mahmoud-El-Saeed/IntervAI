@@ -1,3 +1,5 @@
+import tailwindcssRtl from 'tailwindcss-rtl';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'class',
@@ -27,7 +29,7 @@ export default {
       },
       fontFamily: {
         headline: ['Manrope', 'sans-serif'],
-        body: ['Inter', 'sans-serif'],
+        body: ['Inter', 'IBM Plex Sans Arabic', 'sans-serif'],
         code: ['Space Grotesk', 'sans-serif'],
       },
       borderRadius: {
@@ -52,6 +54,6 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [tailwindcssRtl],
 };
 

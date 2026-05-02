@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Clock3, Plus, AlertCircle, X } from 'lucide-react';
 
@@ -12,8 +13,10 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { SelectResumeModal } from '../components/resume/SelectResumeModal';
 import { useInterviewStore } from '../store/interviewStore';
+import { useLanguageStore } from '../store/languageStore';
 
 export function DashboardPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const setCurrentInterviewId = useInterviewStore((state) => state.setCurrentInterviewId);
   const setSelectedResumeId = useInterviewStore((state) => state.setSelectedResumeId);
@@ -31,7 +34,8 @@ export function DashboardPage() {
   const [jobDescription, setJobDescription] = useState(
     'Design scalable backend APIs, optimize PostgreSQL queries, and drive architecture decisions.',
   );
-  const [preferredLanguage, setPreferredLanguage] = useState('en');
+  const globalLanguage = useLanguageStore((state) => state.currentLanguage);
+  const [preferredLanguage, setPreferredLanguage] = useState(globalLanguage);
 
   useEffect(() => {
     let active = true;
@@ -125,68 +129,71 @@ export function DashboardPage() {
     <div className="space-y-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="font-code text-xs uppercase tracking-[0.1em] text-primary">Interview Intelligence</p>
-          <h2 className="mt-2 font-headline text-4xl font-bold">Interview History</h2>
+          <p className="font-code text-xs uppercase tracking-[0.1em] text-primary">{t('dashboard.interviewIntelligence')}</p>
+          <h2 className="mt-2 font-headline text-4xl font-bold">{t('dashboard.interviewHistory')}</h2>
           <p className="mt-2 text-sm text-on-surface-variant">
-            Review technical performance metrics and initiate new interview sessions.
+            {t('dashboard.reviewPerformance')}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <Button variant="secondary" onClick={() => setModalOpen(true)}>
-            Select Resume
+            {t('dashboard.selectResume')}
           </Button>
           <Button onClick={onCreateInterview} disabled={creating}>
-            <Plus size={16} className="mr-2" />
-            {creatingStage === 'creating' && 'Creating Interview...'}
-            {creatingStage === 'analyzing' && 'Analyzing Resume...'}
-            {creatingStage === 'polling' && 'Starting Interview...'}
-            {!creatingStage && (creating ? 'Initiating...' : 'Initiate New Session')}
+            <Plus size={16} className="mr-2 rtl:ml-2" />
+            {creatingStage === 'creating' && t('dashboard.creatingInterview')}
+            {creatingStage === 'analyzing' && t('dashboard.analyzingResume')}
+            {creatingStage === 'polling' && t('dashboard.startingInterview')}
+            {!creatingStage && (creating ? t('dashboard.initiating') : t('dashboard.initiateNewSession'))}
           </Button>
         </div>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
         <article className="glass-card rounded-lg p-4">
-          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">Total Sessions</p>
+          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">{t('dashboard.totalSessions')}</p>
           <p className="mt-2 font-headline text-3xl font-bold">{historyStats.total}</p>
         </article>
         <article className="glass-card rounded-lg p-4">
-          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">Completed</p>
+          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">{t('dashboard.completed')}</p>
           <p className="mt-2 font-headline text-3xl font-bold text-emerald-300">{historyStats.completed}</p>
         </article>
         <article className="glass-card rounded-lg p-4">
-          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">In Progress</p>
+          <p className="font-code text-xs uppercase tracking-[0.1em] text-on-surface-variant">{t('dashboard.inProgress')}</p>
           <p className="mt-2 font-headline text-3xl font-bold text-cyan-300">{historyStats.inProgress}</p>
         </article>
       </section>
 
       <section className="glass-card rounded-lg p-5">
-        <h3 className="font-headline text-xl">Session Configuration</h3>
+        <h3 className="font-headline text-xl">{t('dashboard.sessionConfiguration')}</h3>
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm text-on-surface-variant">Job title</label>
+            <label className="mb-1 block text-sm text-on-surface-variant">{t('dashboard.jobTitle')}</label>
             <Input value={jobTitle} onChange={(event) => setJobTitle(event.target.value)} />
           </div>
           <div>
-            <label className="mb-1 block text-sm text-on-surface-variant">Preferred language</label>
-            <Input
+            <label className="mb-1 block text-sm text-on-surface-variant">{t('dashboard.preferredLanguage')}</label>
+            <select
               value={preferredLanguage}
               onChange={(event) => setPreferredLanguage(event.target.value)}
-              placeholder="en"
-            />
+              className="w-full rounded-md border border-outline-variant bg-surface-container-low px-3 py-2 text-sm text-on-surface focus:border-primary-container focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="en">{t('dashboard.english')}</option>
+              <option value="ar">{t('dashboard.arabic')}</option>
+            </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm text-on-surface-variant">Selected resume</label>
+            <label className="mb-1 block text-sm text-on-surface-variant">{t('dashboard.selectedResume')}</label>
             <Input
               readOnly
-              value={selectedResumeId ? `${selectedResumeId.slice(0, 8)}...` : 'No resume selected'}
+              value={selectedResumeId ? `${selectedResumeId.slice(0, 8)}...` : t('dashboard.noResumeSelected')}
             />
           </div>
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm text-on-surface-variant">Job description</label>
+          <label className="mb-1 block text-sm text-on-surface-variant">{t('dashboard.jobDescription')}</label>
           <textarea
             className="min-h-24 w-full rounded-md border border-outline-variant bg-surface-container-low px-3 py-2 text-sm text-on-surface focus:border-primary-container focus:outline-none focus:ring-2 focus:ring-primary/30"
             value={jobDescription}
@@ -203,10 +210,10 @@ export function DashboardPage() {
 
       <section className="space-y-3">
         {loading ? (
-          <div className="glass-card rounded-lg p-4 text-sm text-on-surface-variant">Loading interview history...</div>
+          <div className="glass-card rounded-lg p-4 text-sm text-on-surface-variant">{t('dashboard.loadingHistory')}</div>
         ) : history.length === 0 ? (
           <div className="glass-card rounded-lg p-4 text-sm text-on-surface-variant">
-            No interviews yet. Start a new session to see it appear here.
+            {t('dashboard.noInterviews')}
           </div>
         ) : (
           history.map((item) => (
@@ -247,7 +254,7 @@ export function DashboardPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <AlertCircle size={24} className="text-error" />
-                <h3 className="font-headline text-lg font-bold">Session Setup Failed</h3>
+                <h3 className="font-headline text-lg font-bold">{t('dashboard.sessionSetupFailed')}</h3>
               </div>
               <button onClick={() => {
                 setErrorModalOpen(false);
@@ -262,10 +269,10 @@ export function DashboardPage() {
                 setErrorModalOpen(false);
                 setErrorMessage('');
               }}>
-                Cancel
+                {t('dashboard.cancel')}
               </Button>
               <Button onClick={handleRetryCreate}>
-                Retry
+                {t('dashboard.retry')}
               </Button>
             </div>
           </div>
