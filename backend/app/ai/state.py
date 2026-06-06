@@ -77,6 +77,8 @@ class InterviewSessionState(TypedDict, total=False):
     missing_skills: list[str]
     memory: str
     turn_index: int
+    is_first_turn: bool
+    pending_greeting: str
     recent_topics: Annotated[list[str], operator.add]
     current_topic: str
     current_question: str

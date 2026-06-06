@@ -213,6 +213,8 @@ class InterviewAIService:
             "missing_skills": _as_items(analysis.get("missing_skills", {})),
             "memory": "",
             "turn_index": 0,
+            "is_first_turn": True,
+            "pending_greeting": "",
             "recent_topics": [],
             "current_topic": "General",
             "current_question": "",

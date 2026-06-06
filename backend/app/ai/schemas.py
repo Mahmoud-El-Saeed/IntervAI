@@ -88,6 +88,10 @@ class NextQuestion(BaseModel):
     difficulty: Literal["Easy", "Medium", "Hard"] = "Medium"
 
 
+class GreetingResult(BaseModel):
+    greeting: str = ""
+
+
 class AnalysisResult(BaseModel):
     category: Literal["Complete", "Partial", "Skipped"] = "Partial"
     relevance_score: int = 0

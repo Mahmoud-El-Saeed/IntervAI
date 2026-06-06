@@ -18,6 +18,7 @@ from .exceptions import InterviewError, LLMError
 from .helpers import log_progress, build_msg
 from .helpers import normalize_interview_score
 from .prompts import (
+    SYSTEM_GREETING,
     SYSTEM_STRATEGY,
     SYSTEM_QUESTION_GENERATOR,
     SYSTEM_ANALYZER,
@@ -27,6 +28,7 @@ from .prompts import (
     SYSTEM_CHAT_SUMMARY,
 )
 from .schemas import (
+    GreetingResult,
     NextQuestion,
     AnalysisResult,
     EvaluationResult,
@@ -60,6 +62,71 @@ def _get_language_directive(preferred_language: str) -> str:
 def _is_rate_limit_error(exc: Exception) -> bool:
     message = str(exc).lower()
     return "429" in message or "rate limit" in message or "rate_limit_exceeded" in message
+
+
+async def greeting_node(state: InterviewSessionState) -> dict[str, Any]:
+    """Generate greeting message for the candidate."""
+    log_progress("greeting_node", "Generating interview greeting")
+
+    interview_data = state.get("interview_data", {})
+    job_title = state.get("job_title", "the position")
+    preferred_language = state.get("preferred_language", "en")
+    lang_directive = _get_language_directive(preferred_language)
+
+    candidate_name = "there"
+    personal_info = interview_data.get("personal_info", {})
+    if personal_info and personal_info.get("name"):
+        candidate_name = personal_info.get("name", "there")
+    else:
+        cv_text = state.get("resume_text", "")
+        if cv_text and len(cv_text) > 0:
+            lines = cv_text.split('\n')
+            for line in lines[:10]:
+                if line.strip() and len(line.split()) <= 3:
+                    candidate_name = line.strip().title()
+                    break
+
+    parser = JsonOutputParser(pydantic_object=GreetingResult)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", SYSTEM_GREETING + "\n{language_instruction}\n{format_instructions}"),
+            ("human", "Candidate Name: {candidate_name}\nJob Title: {job_title}"),
+        ]
+    ).partial(
+        format_instructions=parser.get_format_instructions(),
+        language_instruction=lang_directive,
+    )
+
+    try:
+        out = await invoke_llm_chain(
+            prompt,
+            parser,
+            {
+                "candidate_name": candidate_name,
+                "job_title": job_title,
+            },
+            get_strategy_service(),
+        )
+
+        greeting_text = out.get("greeting", "").strip()
+        if not greeting_text:
+            greeting_text = f"Hello {candidate_name}! I'm excited to conduct your interview for the {job_title} position. Are you ready to begin?"
+
+        log_progress("greeting_node", "Greeting generated successfully")
+
+        return {
+            "pending_greeting": greeting_text,
+            "status": "greeting_ready",
+            "progress_message": "Greeting prepared",
+        }
+    except Exception as e:
+        log_progress("greeting_node", f"Greeting generation failed: {e}")
+        fallback_greeting = f"Hello! Welcome to your technical interview for {job_title}. Are you ready to begin?"
+        return {
+            "pending_greeting": fallback_greeting,
+            "status": "greeting_ready",
+            "progress_message": "Greeting prepared (fallback)",
+        }
 
 
 def _build_fallback_hint(current_question: str, expected_answer: str, hint_counter: int) -> str:
@@ -163,11 +230,13 @@ async def strategy_node(state: InterviewSessionState) -> dict[str, Any]:
 async def question_generator_node(state: InterviewSessionState) -> dict[str, Any]:
     log_progress("question_generator_node", "Generating next interview question")
 
+    pending_greeting = state.get("pending_greeting", "")
     asked = state.get("asked_questions", [])
     answers = state.get("answers", [])
     analysis = state.get("analysis", [])
     strategy = state.get("strategy", {})
     question_count = int(state.get("total_questions_asked", state.get("question_count", 0)) or 0)
+    feedback_on_previous = state.get("feedback_on_previous_answer", "")
 
     if question_count >= MAX_QUESTIONS:
         return {
@@ -219,7 +288,14 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
     lang_directive = _get_language_directive(preferred_language)
 
     parser = JsonOutputParser(pydantic_object=NextQuestion)
+    has_greeting = bool(pending_greeting and question_count == 0)
+    
+    bridge_context = ""
+    if feedback_on_previous and question_count > 0:
+        bridge_context = f"\n=== PREVIOUS ANSWER CONTEXT ===\n{feedback_on_previous}\n"
+
     prompt_content = (
+            f"{bridge_context}"
             "Target Skill: {target_skill}\n\n"
             "=== RETRIEVED CONTEXT (From Resume/Projects) ===\n"
             "{rag_context}\n\n"
@@ -234,6 +310,7 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
             "Job Title: {job_title}\n"
             "Job Requirements: {job_requirements}\n"
             "Previous Answers: {answers}\n"
+            f"PENDING GREETING (combine with first question if exists): {pending_greeting}\n"
             "REMEMBER: Be conversational."
         )
 
@@ -254,6 +331,7 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
                 "job_title": state.get("job_title", ""),
                 "job_requirements": json.dumps(list(state.get("job_requirements", [])), ensure_ascii=False),
                 "answers": json.dumps(asked[-1:], ensure_ascii=False),
+                "pending_greeting": pending_greeting if has_greeting else "",
             },
             get_question_service(),
         )
@@ -279,6 +357,8 @@ async def question_generator_node(state: InterviewSessionState) -> dict[str, Any
         "hint_counter": 0,
         "request_hint": False,
         "force_move_next": False,
+        "pending_greeting": "",
+        "is_first_turn": False,
         "forced_penalty": 0,
         "status": "awaiting_answer",
         "progress_message": f"Question {question_count + 1} generated",
@@ -582,6 +662,7 @@ async def evaluator_node(state: InterviewSessionState) -> dict[str, Any]:
             "chat_history": [build_msg("ai_feedback", feedback_text)],
             "force_move_next": False,
             "forced_penalty": 0,
+            "feedback_on_previous_answer": f"{out.get('acknowledgement', '')} {out.get('feedback', '')}".strip(),
         }
     except Exception as e:
         log_progress("evaluator_node", f"Evaluation failed: {e}")

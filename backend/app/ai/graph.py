@@ -20,6 +20,7 @@ from .nodes_analysis import (
     finalize_analysis_node,
 )
 from .nodes_interview import (
+    greeting_node,
     strategy_node,
     question_generator_node,
     human_input_node,
@@ -125,6 +126,7 @@ def _build_interview_graph() -> StateGraph[InterviewSessionState]:
     """Build interactive interview graph."""
     builder = StateGraph(InterviewSessionState)
 
+    builder.add_node("greeting_node", greeting_node)
     builder.add_node("strategy_node", strategy_node)
     builder.add_node("question_generator_node", question_generator_node)
     builder.add_node("human_input_node", human_input_node)
@@ -134,7 +136,8 @@ def _build_interview_graph() -> StateGraph[InterviewSessionState]:
     builder.add_node("evaluator_node", evaluator_node)
     builder.add_node("generate_final_report_node", generate_final_report_node)
 
-    builder.add_edge(START, "strategy_node")
+    builder.add_edge(START, "greeting_node")
+    builder.add_edge("greeting_node", "strategy_node")
     builder.add_edge("strategy_node", "question_generator_node")
     # After question_generator, graph ends and waits for frontend to submit answer
     # The submit_answer flow will resume from human_input_node
